@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meter Location Finder</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            text-align: center;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        .search-container {
+            max-width: 600px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 50px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2);
+        }
+
+        .search-btn {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+        }
+
+        .search-btn:hover {
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+        }
+
+        .suggestions.show {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s ease;
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-item:hover {
+            background: #f5f5f5;
+        }
+
+        .main-content {
+            padding: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: #333;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .map-section {
+            display: flex;
+            gap: 20px;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+
+        .info-item {
+            margin-bottom: 15px;
+        }
+
+        .info-label {
+            font-size: 13px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 18px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .map-container {
+            flex: 1;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        #map {
+            width: 100%;
+            height: 600px;
+        }
+
+        .graphs-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .graph-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .graph-card h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .no-result {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .no-result h3 {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔌 Meter Location Finder</h1>
+        <div class="search-container">
+            <input type="text" class="search-input" id="searchInput" placeholder="Enter Meter Number...">
+            <button class="search-btn" onclick="searchMeter()">Search</button>
+            <div class="suggestions" id="suggestions"></div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('map')">📍 Map View</button>
+            <button class="tab-btn" onclick="showTab('graphs')">📊 Graphs & Stats</button>
+        </div>
+
+        <div id="map-tab" class="tab-content active">
+            <div class="map-section">
+                <div class="sidebar" id="sidebar" style="display: none;">
+                    <h2>📍 Meter Details</h2>
+                    <div class="info-item">
+                        <div class="info-label">Meter Number</div>
+                        <div class="info-value" id="meterNo">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Latitude</div>
+                        <div class="info-value" id="lat">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Longitude</div>
+                        <div class="info-value" id="lng">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Data Points Used</div>
+                        <div class="info-value" id="count">-</div>
+                    </div>
+                </div>
+                <div class="map-container">
+                    <div id="map"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="graphs-tab" class="tab-content">
+            <div class="stats-grid" id="statsGrid"></div>
+            <div class="graphs-section">
+                <div class="graph-card">
+                    <h3>📈 Records per File</h3>
+                    <canvas id="filesChart"></canvas>
+                </div>
+                <div class="graph-card">
+                    <h3>📊 Meter Frequency</h3>
+                    <canvas id="frequencyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map;
+        let marker;
+        let filesChart;
+        let frequencyChart;
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([28.61, 77.30], 12);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+            
+            if (tabName === 'graphs') {
+                loadStats();
+            }
+        }
+
+        // Search functionality
+        const searchInput = document.getElementById('searchInput');
+        const suggestions = document.getElementById('suggestions');
+
+        searchInput.addEventListener('input', async function() {
+            const query = this.value.trim().toLowerCase();
+            
+            if (query.length > 0) {
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const matches = await response.json();
+
+                if (matches.length > 0) {
+                    suggestions.innerHTML = matches.map(meter => 
+    `<div class="suggestion-item" onclick="selectMeter('${meter}')">${meter}</div>`
+).join('')
+                    suggestions.classList.add('show');
+                } else {
+                    suggestions.classList.remove('show');
+                }
+            } else {
+                suggestions.classList.remove('show');
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.search-container')) {
+                suggestions.classList.remove('show');
+            }
+        });
+
+        function selectMeter(meterno) {
+            searchInput.value = meterno;
+            suggestions.classList.remove('show');
+            searchMeter();
+        }
+
+        async function searchMeter() {
+            const query = searchInput.value.trim();
+            
+            if (!query) {
+                alert('Please enter a meter number');
+                return;
+            }
+
+            const response = await fetch(`/api/meter/${encodeURIComponent(query)}`);
+            
+            if (response.ok) {
+                const meter = await response.json();
+                displayMeter(meter);
+            } else {
+                alert('Meter not found');
+            }
+        }
+
+        function displayMeter(meter) {
+            const sidebar = document.getElementById('sidebar');
+
+    sidebar.style.display = 'block';
+
+    // ======================
+    // SIDEBAR DETAILS
+    // ======================
+
+    document.getElementById('meterNo').textContent =
+        meter.meterno;
+
+    // Prefer DBSCAN location
+    let lat = null;
+    let lng = null;
+    let count = 0;
+
+    if (meter.dbscan) {
+
+        lat = meter.dbscan.latitude;
+        lng = meter.dbscan.longitude;
+        count = meter.dbscan.points_used;
+
+    } else if (meter.agglomerative) {
+
+        lat = meter.agglomerative.latitude;
+        lng = meter.agglomerative.longitude;
+        count = meter.agglomerative.points_used;
+    }
+
+    document.getElementById('lat').textContent =
+        lat ? lat.toFixed(6) : '-';
+
+    document.getElementById('lng').textContent =
+        lng ? lng.toFixed(6) : '-';
+
+    document.getElementById('count').textContent =
+        count;
+
+
+    // ======================
+    // CLEAR OLD LAYERS
+    // ======================
+
+    map.eachLayer(layer => {
+
+        if (
+            layer instanceof L.Marker ||
+            layer instanceof L.CircleMarker
+        ) {
+            map.removeLayer(layer);
+        }
+
+    });
+
+
+    // ======================
+    // RAW GPS POINTS
+    // ======================
+
+    meter.raw_points.forEach(point => {
+
+        L.circleMarker(
+            [point.latitude, point.longitude],
+            {
+                radius: 4,
+                color: 'red',
+                fillOpacity: 0.6
+            }
+        )
+        .addTo(map)
+        .bindPopup("Raw GPS Point");
+
+    });
+
+
+    // ======================
+    // DBSCAN POINT
+    // ======================
+
+if (meter.dbscan) {
+
+    L.circleMarker(
+        [
+            meter.dbscan.latitude,
+            meter.dbscan.longitude
+        ],
+        {
+            radius: 10,
+            color: 'green',
+            fillColor: 'green',
+            fillOpacity: 1
+        }
+    )
+    .addTo(map)
+    .bindPopup(
+        `<b>DBSCAN Result</b><br>
+        Lat: ${meter.dbscan.latitude.toFixed(6)}<br>
+        Lng: ${meter.dbscan.longitude.toFixed(6)}<br>
+        Points Used: ${meter.dbscan.points_used}`
+    );
+
+    map.setView(
+        [
+            meter.dbscan.latitude,
+            meter.dbscan.longitude
+        ],
+        17
+    );
+}
+
+
+    // ======================
+    // AGGLOMERATIVE POINT
+    // ======================
+
+    if (meter.agglomerative) {
+
+        L.circleMarker(
+            [
+                meter.agglomerative.latitude,
+                meter.agglomerative.longitude
+            ],
+            {
+                radius: 8,
+                color: 'blue',
+                fillOpacity: 1
+            }
+        )
+        .addTo(map)
+        .bindPopup(
+            `<b>Agglomerative Result</b><br>
+            Lat: ${meter.agglomerative.latitude.toFixed(6)}<br>
+            Lng: ${meter.agglomerative.longitude.toFixed(6)}`
+        );
+    }
+}    
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchMeter();
+            }
+        });
+
+        async function loadStats() {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.total_unique_meters.toLocaleString()}</div>
+                    <div class="stat-label">Unique Meters</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.total_records.toLocaleString()}</div>
+                    <div class="stat-label">Total Records</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.files.labels.length}</div>
+                    <div class="stat-label">Files Processed</div>
+                </div>
+            `;
+
+            if (filesChart) filesChart.destroy();
+            const ctx1 = document.getElementById('filesChart').getContext('2d');
+            filesChart = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: stats.files.labels.map(f => f.replace('.xls', '')),
+                    datasets: [
+                        {
+                            label: 'Total Records',
+                            data: stats.files.total,
+                            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Unique Meters',
+                            data: stats.files.unique,
+                            backgroundColor: 'rgba(118, 75, 162, 0.8)',
+                            borderColor: 'rgba(118, 75, 162, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            if (frequencyChart) frequencyChart.destroy();
+            const ctx2 = document.getElementById('frequencyChart').getContext('2d');
+            frequencyChart = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: stats.meter_counts.labels,
+                    datasets: [{
+                        label: 'Number of Meters',
+                        data: stats.meter_counts.values,
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Number of Records per Meter'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        initMap();
+    </script>
+</body>
+</html>
