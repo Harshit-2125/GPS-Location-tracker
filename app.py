@@ -1,5 +1,4 @@
 import os
-import glob
 import pandas as pd
 import numpy as np
 
@@ -10,7 +9,11 @@ from sklearn.cluster import AgglomerativeClustering
 
 app = Flask(__name__)
 
-main_folder = r"E:\bses project\Metre location"
+UPLOAD_FOLDER = 'uploads'
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 # =========================
@@ -74,43 +77,8 @@ def read_excel_file(path):
 
 print("Loading and processing data...")
 
-files = glob.glob(main_folder + "/*.xls")
+final_df = pd.DataFrame()
 
-all_data = []
-
-for file in files:
-
-    df = read_excel_file(file)
-
-    if df is None:
-        continue
-
-    df['source_file'] = os.path.basename(file)
-
-    all_data.append(df)
-
-final_df = pd.concat(all_data, ignore_index=True)
-
-final_df['gps_lat'] = pd.to_numeric(
-    final_df['gps_lat'],
-    errors='coerce'
-)
-
-final_df['gps_long'] = pd.to_numeric(
-    final_df['gps_long'],
-    errors='coerce'
-)
-
-# coordinate conversion
-final_df['latitude'] = final_df['gps_lat'].apply(convert_coordinate)
-
-final_df['longitude'] = final_df['gps_long'].apply(convert_coordinate)
-
-final_df = final_df.dropna(
-    subset=['latitude', 'longitude']
-)
-
-print(f"Loaded {len(final_df)} records!")
 
 
 # =========================
@@ -122,6 +90,86 @@ def index():
 
     return render_template('index.html')
 
+# =========================
+# Upload Files API
+# =========================
+
+@app.route('/upload', methods=['POST'])
+def upload_files():
+
+    uploaded_files = request.files.getlist('files')
+
+    all_data = []
+
+    for file in uploaded_files:
+        if not (
+           file.filename.endswith('.xls')
+        or
+           file.filename.endswith('.xlsx')
+        ):
+           continue
+
+        filepath = os.path.join(
+            app.config['UPLOAD_FOLDER'],
+            file.filename
+        )
+
+        file.save(filepath)
+
+        df = read_excel_file(filepath)
+
+        if df is None:
+            continue
+
+        df['source_file'] = file.filename
+
+        all_data.append(df)
+
+    if len(all_data) == 0:
+
+        return jsonify({
+            "error": "No valid files uploaded"
+        }), 400
+
+    global final_df
+
+    final_df = pd.concat(
+        all_data,
+        ignore_index=True
+    )
+
+    final_df['gps_lat'] = pd.to_numeric(
+        final_df['gps_lat'],
+        errors='coerce'
+    )
+
+    final_df['gps_long'] = pd.to_numeric(
+        final_df['gps_long'],
+        errors='coerce'
+    )
+
+    final_df['latitude'] = (
+        final_df['gps_lat']
+        .apply(convert_coordinate)
+    )
+
+    final_df['longitude'] = (
+        final_df['gps_long']
+        .apply(convert_coordinate)
+    )
+
+    final_df = final_df.dropna(
+        subset=['latitude', 'longitude']
+    )
+
+    return jsonify({
+
+        "message":
+            "Files uploaded successfully",
+
+        "records":
+            int(len(final_df))
+    })
 
 # =========================
 # Search API
@@ -129,6 +177,8 @@ def index():
 
 @app.route('/api/search')
 def search():
+    if final_df.empty:
+       return jsonify([])
 
     query = request.args.get('q', '').lower()
 
@@ -149,7 +199,11 @@ def search():
 
 @app.route('/api/meter/<meterno>')
 def get_meter(meterno):
-
+    if final_df.empty:
+    
+        return jsonify({
+            "error": "No files uploaded"
+        }), 400
     meter_data = final_df[
         final_df['meterno'].astype(str) == str(meterno)
     ].copy()
@@ -227,25 +281,37 @@ def get_meter(meterno):
     if len(coords) >= 2:
 
         agg = AgglomerativeClustering(
-            n_clusters=1
+            n_clusters=None,
+            distance_threshold=0.0001
         )
 
         agg_labels = agg.fit_predict(
-            coords[['latitude', 'longitude']]
-        )
+        coords[['latitude', 'longitude']]
+)
 
         coords['agg_cluster'] = agg_labels
-
+        
+        main_cluster = (
+            coords['agg_cluster']
+            .value_counts()
+            .idxmax()
+        )
+        
+        cluster_points = coords[
+            coords['agg_cluster'] == main_cluster
+        ]
+        
         agg_result = {
-
+        
             "latitude":
-                float(coords['latitude'].median()),
-
+                float(cluster_points['latitude'].median()),
+        
             "longitude":
-                float(coords['longitude'].median()),
-
+                float(cluster_points['longitude'].median()),
+        
             "points_used":
-                int(len(coords))
+                int(len(cluster_points))
+
         }
 
     # =====================
@@ -273,7 +339,11 @@ def get_meter(meterno):
 
 @app.route('/api/stats')
 def get_stats():
-
+    if final_df.empty:
+    
+        return jsonify({
+            "error": "No files uploaded"
+        }), 400
     file_total = (
         final_df.groupby('source_file')['meterno']
         .count()
