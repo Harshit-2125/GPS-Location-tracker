@@ -256,6 +256,43 @@
 <body>
     <div class="header">
         <h1>🔌 Meter Location Finder</h1>
+        <div style="
+            max-width: 600px;
+            margin: 0 auto 20px auto;
+            display: flex;
+            gap: 10px;
+        ">
+        
+            <input
+                type="file"
+                id="fileInput"
+                multiple
+                accept=".xls,.xlsx"
+                style="
+                    flex: 1;
+                    padding: 12px;
+                    background: white;
+                    border-radius: 10px;
+                    border: 2px solid #ddd;
+                "
+            >
+        
+            <button
+                onclick="uploadFiles()"
+                style="
+                    padding: 12px 20px;
+                    border: none;
+                    border-radius: 10px;
+                    background: #28a745;
+                    color: white;
+                    font-weight: bold;
+                    cursor: pointer;
+                "
+            >
+                Upload Files
+            </button>
+        
+        </div>
         <div class="search-container">
             <input type="text" class="search-input" id="searchInput" placeholder="Enter Meter Number...">
             <button class="search-btn" onclick="searchMeter()">Search</button>
@@ -317,7 +354,66 @@
         let marker;
         let filesChart;
         let frequencyChart;
-
+        async function uploadFiles() {
+        
+            const files =
+                document.getElementById('fileInput').files;
+                alert('Uploading and processing files...');
+                document.body.style.cursor = 'wait';
+        
+            if (files.length === 0) {
+        
+                alert('Please select Excel files');
+        
+                return;
+            }
+            alert('Uploading and processing files...');
+            document.body.style.cursor = 'wait';
+        
+            const formData = new FormData();
+        
+            for (let file of files) {
+        
+                formData.append('files', file);
+        
+            }
+        
+            try {
+        
+                const response = await fetch('/upload', {
+        
+                    method: 'POST',
+        
+                    body: formData
+        
+                });
+        
+                const result = await response.json();
+        
+                if (response.ok) {
+        
+                    alert(
+                        `Files uploaded successfully!\nRecords Loaded: ${result.records}`
+                    );
+                    document.body.style.cursor = 'default';
+                    document.getElementById('fileInput').value = '';
+        
+                } else {
+        
+                    alert(result.error || 'Upload failed');
+                    document.body.style.cursor = 'default';
+        
+                }
+        
+            } catch (error) {
+        
+                console.error(error);
+        
+                alert('Upload error');
+                document.body.style.cursor = 'default';
+        
+            }
+        }
         // Initialize map
         function initMap() {
             map = L.map('map').setView([28.61, 77.30], 12);
@@ -388,9 +484,14 @@
             
             if (response.ok) {
                 const meter = await response.json();
+            
                 displayMeter(meter);
+            
             } else {
-                alert('Meter not found');
+            
+                const errorData = await response.json();
+            
+                alert(errorData.error || 'Meter not found');
             }
         }
 
@@ -438,15 +539,14 @@
     // CLEAR OLD LAYERS
     // ======================
 
-    map.eachLayer(layer => {
+    map.eachLayer(function(layer) {
 
-        if (
-            layer instanceof L.Marker ||
-            layer instanceof L.CircleMarker
-        ) {
+        if (!(layer instanceof L.TileLayer)) {
+    
             map.removeLayer(layer);
+    
         }
-
+    
     });
 
 
@@ -520,6 +620,7 @@ if (meter.dbscan) {
             {
                 radius: 8,
                 color: 'blue',
+                fillColor: 'blue',
                 fillOpacity: 1
             }
         )
